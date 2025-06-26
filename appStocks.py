@@ -150,7 +150,7 @@ if submitted:
         except Exception as e:
             st.error(f"❌ Error al subir a Dropbox: {e}")
         
-        
+                                   
 # Visualización
 st.subheader("📊 Visualizar un símbolo")
                                     
@@ -159,11 +159,12 @@ simbolos_disponibles = get_simbolos_disponibles(st.session_state.carpeta)
 archivos_xlsx = [f for f in os.listdir(st.session_state.carpeta) if f.endswith(".xlsx")]
     
 seleccion = st.selectbox("Selecciona símbolo:", simbolos_disponibles)
-simbolo_elegido = seleccion.split(" ")[0]  # extrae "AAPL" de "AAPL (desde 2022-01-01)"  
+
+simbolo_elegido = seleccion.split(" ")[0]  # extrae "AAPL" de "AAPL (desde 2022-01-01)"
 #archivo_sel = [f for f in archivos_xlsx if f.startswith(simbolo_elegido)][0]
 archivo_sel = next((f for f in archivos_xlsx if f.startswith(simbolo_elegido)), None)
 
-
+df = pd.DataFrame()
                 
 if archivo_sel:
     try:
@@ -328,6 +329,9 @@ if archivo_sel:
                 
     except Exception as e:
         st.error(f"❌ Error al leer el archivo de {seleccion}: {e}")
+        df = pd.DataFrame()
+else:
+    st.warning("No se encontró el archivo seleccionado.")
 
 # === Ejemplo de integración en app Streamlit ===
 st.subheader("🧠 Señales técnicas avanzadas")
@@ -337,6 +341,7 @@ activar = st.checkbox("Activar señales avanzadas de trading", value=True)
 if activar:
     volumen_usuario = st.number_input("Volumen mínimo (opcional)", min_value=0, value=st.session_state.get("volumen_usuario", 1000000), step=100000)
     st.session_state.volumen_usuario = volumen_usuario
+    incluir_sma_largo = st.session_state.get("incluir_sma_largo_plazo", True)
 
     st.info("Se aplicarán señales de SMA, MACD y RSI combinadas.")
     if not df.empty:
@@ -380,7 +385,6 @@ if activar_bt:
     else:
         st.warning("No hay señales disponibles para simular. Activa las señales primero.")
 
-  
 
 # ===============================
 # 🎯 Incorporacion de iA para predeiccion de tendencias 
@@ -822,6 +826,39 @@ with tabs[4]:  # 📊 Distribución de Sentimiento por Acción
             (df_sentimiento["Símbolo"] == simbolo_filtrado)
         )
         df_filtrado = df_sentimiento[filtro]
+
+#        if not df_filtrado.empty:
+#            st.markdown(f"### 🔍 Sentimiento para **{simbolo_filtrado}** del {fecha_inicio} al {fecha_fin}")
+#            pivot = df_filtrado.pivot_table(index="Fecha", columns="Sentimiento", values="Cantidad", aggfunc="sum").fillna(0)
+
+#            fig, ax = plt.subplots(figsize=(8, 4))
+#            pivot.plot(kind="bar", stacked=True, ax=ax)
+#            ax.set_title(f"Tendencia de Sentimiento - {simbolo_filtrado}")
+#            ax.set_ylabel("Cantidad de menciones")
+#            ax.set_xlabel("Fecha")
+#            ax.legend(title="Sentimiento")
+#            st.pyplot(fig)
+#        else:
+#            st.warning("No hay datos disponibles para los filtros seleccionados.")
+
+
+            # 🔁 Gráfico de Tendencia de Sentimiento
+#     st.subheader("📈 Tendencia de Sentimiento en el Tiempo")
+    
+#     if not df_filtrado.empty:
+#         pivot_lineas = df_filtrado.pivot_table(index="Fecha", columns="Sentimiento", values="Cantidad", aggfunc="sum").fillna(0)
+    
+#         fig_linea, ax_linea = plt.subplots(figsize=(8, 4))
+#         pivot_lineas.plot(kind="line", marker='o', ax=ax_linea)
+#         ax_linea.set_title(f"Tendencia de Sentimiento Diario - {simbolo_filtrado}")
+#         ax_linea.set_ylabel("Cantidad de menciones")
+#         ax_linea.set_xlabel("Fecha")
+# #         ax_linea.grid(True)
+#         ax_linea.legend(title="Sentimiento")
+#         st.pyplot(fig_linea)
+#     else:
+#         st.warning("No hay datos suficientes para mostrar la tendencia.")
+
 
 
      # Agrupar cantidad por Fecha, Símbolo y Sentimiento
