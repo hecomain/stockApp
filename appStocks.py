@@ -150,35 +150,7 @@ if submitted:
         except Exception as e:
             st.error(f"❌ Error al subir a Dropbox: {e}")
         
-                        
-
-#archivos_csv = [f for f in os.listdir(carpeta) if f.endswith(".csv")]  -- CSV Option       
-#simbolos_disponibles = [f.split("_")[0] for f in archivos_xlxs]
-#seleccion = st.selectbox("Selecciona un símbolo:", simbolos_disponibles, key="selector_simbolo")
-#archivo_sel = [f for f in archivos_xlxs if f.startswith(seleccion)][0]
-#df = pd.read_csv(os.path.join(carpeta, archivo_sel), index_col='Date', parse_dates=True)
-                
-                            
-#archivos_xlxs = [f for f in os.listdir(st.session_state.carpeta) if f.endswith(".xlsx")]
-#simbolos_disponibles = [f.split("_")[0] for f in archivos_xlxs]
-#seleccion = st.selectbox("Selecciona un símbolo para ver sus gráficos:", simbolos_disponibles)
-#archivo_sel = next((f for f in archivos_xlxs if f.startswith(seleccion)), None)
-
-
-    
-#simbolos_disponibles = []
-#archivos_xlsx = [f for f in os.listdir(st.session_state.carpeta) if f.endswith(".xlsx")]
-    
-#for archivo in archivos_xlsx:
-#    try:
-#        partes = archivo.replace(".xlsx", "").split("_")
-#        simbolo = partes[0]
-#        fecha = partes[1]  # Esto da "2022-01-01"
-#        simbolos_disponibles.append(f"{simbolo} (desde {fecha})")
-#    except Exception as e:
-#        st.warning(f"No se pudo extraer fecha de {archivo}: {e}")
-
-            
+        
 # Visualización
 st.subheader("📊 Visualizar un símbolo")
                                     
@@ -409,62 +381,6 @@ if activar_bt:
         st.warning("No hay señales disponibles para simular. Activa las señales primero.")
 
   
-
-
-
-
-# ===============================
-# 🎯 Incorporacion de iA para predeiccion de tendencias 
-# ===============================
-
-# Arima - necesita dependencias asi que pasamos s prophet
-
-
-
-##st.subheader("📉 Predicción de Tendencia con ARIMA")
-
-# Cargar archivos históricos existentes
-##archivos_historicos = [f for f in os.listdir(st.session_state.carpeta) if f.endswith(".xlsx")]
-##simbolos_disponibles = [f.split("_")[0] for f in archivos_historicos]
-##seleccion = st.selectbox("Selecciona un símbolo para predecir", simbolos_disponibles)
-
-# Selección de horizonte de predicción
-##horizonte = st.selectbox("¿Cuántos días quieres predecir?", [7, 14, 30])
-
-##if st.button("🔮 Predecir con ARIMA"):
-##    archivo = [f for f in archivos_historicos if f.startswith(seleccion)][0]
-##    df = pd.read_excel(os.path.join(st.session_state.carpeta, archivo), engine="openpyxl", index_col="Date", parse_dates=True)
-
-##    if "Close" not in df.columns:
-##        st.error("No se encontró columna 'Close' en el archivo.")
-##    else:
-##        series = df["Close"].dropna()
-
-##        try:
-##            modelo = auto_arima(series, seasonal=False, stepwise=True, suppress_warnings=True)
-##            modelo_fit = modelo.fit(series)
-
-##            pred = modelo_fit.predict(n_periods=horizonte, return_conf_int=True)
-##            pred_values, conf_int = pred
-
-##           fechas_futuras = [series.index[-1] + timedelta(days=i+1) for i in range(horizonte)]
-
-            # Visualización
-##            fig, ax = plt.subplots(figsize=(10, 4))
-##            ax.plot(series.index, series, label="Histórico")
-##            ax.plot(fechas_futuras, pred_values, label="Predicción", color="orange")
-##            ax.fill_between(fechas_futuras, conf_int[:, 0], conf_int[:, 1], color="orange", alpha=0.2, label="Confianza 95%")
-##            ax.set_title(f"Predicción con ARIMA para {seleccion}")
-##            ax.legend()
-##            st.pyplot(fig)
-
-            # Interpretación
-##            direccion = "📈 ALZA probable" if pred_values[-1] > series.iloc[-1] else "📉 BAJA probable"
-##            st.success(f"Resultado: {direccion} en los próximos {horizonte} días.")
-
-##        except Exception as e:
-##            st.error(f"Error al generar el modelo ARIMA: {e}")
-
 
 # ===============================
 # 🎯 Incorporacion de iA para predeiccion de tendencias 
@@ -906,39 +822,6 @@ with tabs[4]:  # 📊 Distribución de Sentimiento por Acción
             (df_sentimiento["Símbolo"] == simbolo_filtrado)
         )
         df_filtrado = df_sentimiento[filtro]
-
-#        if not df_filtrado.empty:
-#            st.markdown(f"### 🔍 Sentimiento para **{simbolo_filtrado}** del {fecha_inicio} al {fecha_fin}")
-#            pivot = df_filtrado.pivot_table(index="Fecha", columns="Sentimiento", values="Cantidad", aggfunc="sum").fillna(0)
-
-#            fig, ax = plt.subplots(figsize=(8, 4))
-#            pivot.plot(kind="bar", stacked=True, ax=ax)
-#            ax.set_title(f"Tendencia de Sentimiento - {simbolo_filtrado}")
-#            ax.set_ylabel("Cantidad de menciones")
-#            ax.set_xlabel("Fecha")
-#            ax.legend(title="Sentimiento")
-#            st.pyplot(fig)
-#        else:
-#            st.warning("No hay datos disponibles para los filtros seleccionados.")
-
-
-            # 🔁 Gráfico de Tendencia de Sentimiento
-#     st.subheader("📈 Tendencia de Sentimiento en el Tiempo")
-    
-#     if not df_filtrado.empty:
-#         pivot_lineas = df_filtrado.pivot_table(index="Fecha", columns="Sentimiento", values="Cantidad", aggfunc="sum").fillna(0)
-    
-#         fig_linea, ax_linea = plt.subplots(figsize=(8, 4))
-#         pivot_lineas.plot(kind="line", marker='o', ax=ax_linea)
-#         ax_linea.set_title(f"Tendencia de Sentimiento Diario - {simbolo_filtrado}")
-#         ax_linea.set_ylabel("Cantidad de menciones")
-#         ax_linea.set_xlabel("Fecha")
-# #         ax_linea.grid(True)
-#         ax_linea.legend(title="Sentimiento")
-#         st.pyplot(fig_linea)
-#     else:
-#         st.warning("No hay datos suficientes para mostrar la tendencia.")
-
 
 
      # Agrupar cantidad por Fecha, Símbolo y Sentimiento
