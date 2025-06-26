@@ -9,8 +9,6 @@ import pytz
 import plotly.graph_objects as go
 import tempfile
 
-
-
 from plotly.subplots import make_subplots
 from prophet import Prophet
 from fpdf import FPDF
@@ -32,7 +30,6 @@ from utils import (
     get_simbolos_disponibles,
 )
 
-
 # Interfaz de usuario
 st.title("📈 Descargador y Analizador de Acciones")
 
@@ -47,6 +44,10 @@ if "form_guardado" not in st.session_state:
     st.session_state["zona_horaria"] = "America/New_York"
     st.session_state["dropbox_token"] = ""
     st.session_state["subir_dropbox"] = False
+    st.session_state["volumen_usuario"] = 1000000
+    st.session_state["incluir_sma_largo_plazo"] = True
+
+
 
     
 with st.form("formulario_descarga"):
@@ -96,9 +97,9 @@ if submitted:
                 data.columns = [col.split("_")[0] if "_" in col else col for col in data.columns]
                         
                 data = calcular_indicadores(data)
-                data = preparar_dataframe_para_guardar(data)      
                 data = generar_senales(data)
                 data = generar_senales_avanzadas(data, volumen_minimo=1000000)
+               
             
             
                 # 1. Convertir la zona horaria del índice a tu hora local
@@ -111,7 +112,8 @@ if submitted:
                 data.index.name = "Date"
                
                 data = data[pd.to_numeric(data["Close"], errors="coerce").notnull()]
-    
+                
+                data = preparar_dataframe_para_guardar(data)      
     
                 # Guardar Excel
                         
@@ -149,9 +151,7 @@ if submitted:
             st.error(f"❌ Error al subir a Dropbox: {e}")
         
                         
-# Visualización
-st.subheader("📊 Visualizar un símbolo")
-                            
+
 #archivos_csv = [f for f in os.listdir(carpeta) if f.endswith(".csv")]  -- CSV Option       
 #simbolos_disponibles = [f.split("_")[0] for f in archivos_xlxs]
 #seleccion = st.selectbox("Selecciona un símbolo:", simbolos_disponibles, key="selector_simbolo")
@@ -178,22 +178,51 @@ st.subheader("📊 Visualizar un símbolo")
 #    except Exception as e:
 #        st.warning(f"No se pudo extraer fecha de {archivo}: {e}")
 
-        
+            
+# Visualización
+st.subheader("📊 Visualizar un símbolo")
+                                    
 
 simbolos_disponibles = get_simbolos_disponibles(st.session_state.carpeta)
 archivos_xlsx = [f for f in os.listdir(st.session_state.carpeta) if f.endswith(".xlsx")]
     
 seleccion = st.selectbox("Selecciona símbolo:", simbolos_disponibles)
 simbolo_elegido = seleccion.split(" ")[0]  # extrae "AAPL" de "AAPL (desde 2022-01-01)"  
-archivo_sel = [f for f in archivos_xlsx if f.startswith(simbolo_elegido)][0]
-    
-    
+#archivo_sel = [f for f in archivos_xlsx if f.startswith(simbolo_elegido)][0]
+archivo_sel = next((f for f in archivos_xlsx if f.startswith(simbolo_elegido)), None)
+
+
                 
 if archivo_sel:
     try:
         df = pd.read_excel(os.path.join(st.session_state.carpeta, archivo_sel), engine="openpyxl", index_col=0, parse_dates=True)
-        st.subheader("📌 Interpretación Técnica")
-        st.text(generar_interpretacion_tecnica(df))
+        #df_filtrado = df[(df.index.date >= fecha_inicio) & (df.index.date <= fecha_fin)]
+
+        # Si deseas aplicar un filtro de fechas aquí:
+        #df = df[df.index >= st.session_state["fecha"]]
+
+        
+        if 'df' in globals():
+            st.subheader("📅 Filtro de Fechas")
+            fecha_min = df.index.min().date()
+            fecha_max = df.index.max().date()
+
+            fecha_inicio = st.date_input("Desde", value=df.index.min().date(), key="filtro_inicio")
+            fecha_fin = st.date_input("Hasta", value=df.index.max().date(), key="filtro_fin")
+            df = df[(df.index.date >= fecha_inicio) & (df.index.date <= fecha_fin)]
+
+        
+            st.subheader("📌 Interpretación Técnica")
+            st.text(generar_interpretacion_tecnica(df))
+    
+            # Asegurar que el volumen esté definido
+            if "volumen_usuario" not in st.session_state:
+                st.session_state.volumen_usuario = 1000000  # valor por defect
+    
+            # Asegurar que la variable de SMA largo plazo esté definida
+            if "incluir_sma_largo_plazo" not in st.session_state:
+                st.session_state.incluir_sma_largo_plazo = True
+
                                                
         fig = make_subplots(
             rows=3, cols=1,
@@ -213,7 +242,7 @@ if archivo_sel:
         ), row=1, col=1)
             
         fig.add_trace(go.Scatter(x=df.index, y=df["SMA_20"], mode='lines', name="SMA 20"), row=1, col=1)
-        fig.add_trace(go.Scatter(x=df.index, y=df["SMA_50"], mode='lines', name="SMA 50"), row=1, col=1)
+        fig.add_trace(go.Scatter(x=df.index, y=df["SMA_40"], mode='lines', name="SMA 40"), row=1, col=1)
                             
         fig.add_trace(go.Scatter(x=df.index, y=df["MACD"], mode='lines', name="MACD", line=dict(color='purple')), row=2, col=1)
         fig.add_trace(go.Scatter(x=df.index, y=df["Signal_Line"], mode='lines', name="Signal Line", line=dict(color='red')), row=2, col=1)
@@ -236,11 +265,36 @@ if archivo_sel:
         fig1, ax1 = plt.subplots(figsize=(10, 4))
         ax1.plot(df.index, df['Close'], label='Close', color='blue')
         ax1.plot(df.index, df['SMA_20'], label='SMA 20', linestyle='--', color='orange')
-        ax1.plot(df.index, df['SMA_50'], label='SMA 50', linestyle='--', color='green')
+        ax1.plot(df.index, df['SMA_40'], label='SMA 40', linestyle='--', color='green')
         ax1.set_title(f"{seleccion} - Precio y Medias Móviles")
         ax1.legend()
         ax1.grid()
         st.pyplot(fig1)
+
+
+
+        st.subheader("📈 Precio con SMA 20 / 40 / 100 / 200")
+        
+        # Validar que existan las columnas necesarias
+        requeridas = ['Close', 'SMA_20', 'SMA_40', 'SMA_100', 'SMA_200']
+        if all(col in df.columns for col in requeridas):
+            fig, ax = plt.subplots(figsize=(12, 5))
+            ax.plot(df.index, df['Close'], label='Precio de Cierre', color='black', linewidth=1.5)
+            ax.plot(df.index, df['SMA_20'], label='SMA 20', color='orange', linestyle='--')
+            ax.plot(df.index, df['SMA_40'], label='SMA 40', color='blue', linestyle='--')
+            ax.plot(df.index, df['SMA_100'], label='SMA 100', color='green', linestyle='--')
+            ax.plot(df.index, df['SMA_200'], label='SMA 200', color='red', linestyle='--')
+        
+            ax.set_title("Precio vs. Medias Móviles")
+            ax.set_xlabel("Fecha")
+            ax.set_ylabel("Precio")
+            ax.legend()
+            ax.grid(True)
+        
+            st.pyplot(fig)
+        else:
+            st.warning("No se encontraron todas las columnas SMA necesarias en los datos.")
+    
                                 
         fig2, ax2 = plt.subplots(figsize=(10, 2))
         ax2.plot(df.index, df['RSI_14'], label='RSI', color='brown')
@@ -258,6 +312,26 @@ if archivo_sel:
         ax3.legend()
         ax3.grid()
         st.pyplot(fig3)
+
+        # === Opciones de análisis ===
+        st.subheader("⚙️ Opciones de Análisis Técnico")
+        
+        incluir_sma_largo_plazo = st.checkbox("Incluir SMA100 y SMA200 en el análisis", value=st.session_state.get("incluir_sma_largo_plazo", True))
+        st.session_state.incluir_sma_largo_plazo = incluir_sma_largo_plazo
+
+        # Inicializar variables por defecto si no existen
+        volumen_usuario = st.session_state.get("volumen_usuario", 1000000)
+        incluir_sma_largo = st.session_state.get("incluir_sma_largo_plazo", True)
+
+        try:
+            df = generar_senales_avanzadas(df, volumen_minimo=volumen_usuario, incluir_sma_largo_plazo=incluir_sma_largo)
+        except Exception as e:
+            st.error(f"❌ Error generando señales avanzadas: {e}")
+            df = pd.DataFrame()
+
+        
+        #df = generar_senales_avanzadas(df, volumen_minimo=volumen_usuario, incluir_sma_largo_plazo=incluir_sma_largo)
+
                                 
         st.subheader("📌 Señales técnicas")
         senales = generar_senal_ultima_fila(df)
@@ -287,20 +361,23 @@ if archivo_sel:
 st.subheader("🧠 Señales técnicas avanzadas")
 
 activar = st.checkbox("Activar señales avanzadas de trading", value=True)
-volumen_usuario = st.number_input("Volumen mínimo (opcional)", min_value=0, value=1000000, step=100000)
 
 if activar:
+    volumen_usuario = st.number_input("Volumen mínimo (opcional)", min_value=0, value=st.session_state.get("volumen_usuario", 1000000), step=100000)
+    st.session_state.volumen_usuario = volumen_usuario
+
     st.info("Se aplicarán señales de SMA, MACD y RSI combinadas.")
-    # Supongamos que `df` ya existe y tiene los indicadores calculados
-    if 'df' in globals():
-        df = generar_senales_avanzadas(df, volumen_minimo=volumen_usuario)
-        st.write("📋 Señales detectadas:")
-        st.dataframe(df[['Close', 'SMA_20', 'SMA_50', 'MACD', 'Signal_Line', 'RSI_14', 'Volume', 'Signal']].tail(30))
+    if not df.empty:
+        try:
+            df = generar_senales_avanzadas(df, volumen_minimo=volumen_usuario, incluir_sma_largo_plazo=incluir_sma_largo)
+            st.write("📋 Señales detectadas:")
+            st.dataframe(df[['Close', 'SMA_20', 'SMA_40', 'SMA_100', 'SMA_200','MACD', 'Signal_Line', 'RSI_14', 'Volume', 'Signal']].tail(30))
+        except Exception as e:
+            st.error(f"❌ Error en señales avanzadas: {e}")
     else:
         st.warning("No hay datos cargados aún.")
 
-# Mostrar interpretación en Streamlit si hay señales
-if activar and 'df' in globals() and "Signal" in df.columns:
+if activar and not df.empty and "Signal" in df.columns:
     st.markdown("### 🧾 Interpretación técnica automática")
     st.success(interpretar_senales(df))
 
@@ -332,223 +409,7 @@ if activar_bt:
         st.warning("No hay señales disponibles para simular. Activa las señales primero.")
 
   
-# ===============================
-# 🎯 Módulo de almacenamiento de transacciones
-# ===============================
 
-# Inicializar almacenamiento de transacciones
-
-# Ruta del archivo CSV
-
-carpeta_op = st.session_state.carpeta           
-opciones_csv = "opciones/transacciones_opciones.csv"
-full_path_op = os.path.join(carpeta_op, opciones_csv)
-
-# Inicializar o cargar las transacciones existentes
-if "transacciones_opciones" not in st.session_state:
-    if os.path.exists(opciones_csv):
-        st.session_state.transacciones_opciones = pd.read_csv(opciones_csv).to_dict(orient="records")
-    else:
-        st.session_state.transacciones_opciones = []
-
-st.subheader("📝 Registrar transacción de opción bursátil")
-
-with st.form("form_opciones"):
-    col1, col2 = st.columns(2)
-    with col1:
-        simbolo = st.text_input("Símbolo del subyacente (ej: AAPL)", value="AAPL")
-        strike = st.number_input("🎯 Strike Price", min_value=0.0, step=0.5)
-        tipo = st.selectbox("📈 Tipo de opción", ["Call", "Put"])
-        fecha_expiracion = st.date_input("📆 Fecha de expiración")
-    with col2:
-        prima = st.number_input("💰 Prima por contrato ($)", min_value=0.0, step=0.1)
-        contratos = st.number_input("🔢 Cantidad de contratos", min_value=1, step=1, value=1)
-        valor_final = st.number_input("📉 Valor final de la opción ($)", min_value=0.0, step=0.1)
-
-    submitted = st.form_submit_button("Registrar transacción")
-
-    if submitted:
-        transaccion = {
-            "Fecha": date.today(),
-            "Símbolo": simbolo.upper(),
-            "Tipo": tipo,
-            "Strike": strike,
-            "Expiración": fecha_expiracion,
-            "Prima": prima,
-            "Contratos": contratos,
-            "Valor final": valor_final,
-            "Total pagado": prima * contratos * 100,
-            "Total recuperado": valor_final * contratos * 100,
-            "Ganancia/Pérdida": (valor_final - prima) * contratos * 100
-        }
-
-        # Cargar archivo existente si existe
-        if os.path.exists(full_path_op):
-            df_existente = pd.read_csv(full_path_op)
-        else:
-            df_existente = pd.DataFrame()
-
-        # Agregar la nueva fila
-        df_nuevo = pd.concat([df_existente, pd.DataFrame([transaccion])], ignore_index=True)
-
-        # Guardar todo en CSV
-        df_nuevo.to_csv(full_path_op, index=False)
-
-        # Actualizar session_state también
-        st.session_state.transacciones_opciones = df_nuevo.to_dict(orient="records")    
-        st.success("✅ Transacción registrada correctamente.")
-
-
-st.subheader("📊 Backtesting de Opciones con Filtros y Evolución Temporal")
-
-# Validar existencia del archivo
-if not os.path.exists(full_path_op):
-    st.warning("❗ No se encontró el archivo de transacciones. Registra al menos una opción para comenzar.")
-else:
-    df = pd.read_csv(full_path_op, parse_dates=["Fecha", "Expiración"], dayfirst=True)
-
-    # --- Filtros ---
-    st.sidebar.header("🔎 Filtros de Opciones")
-    simbolos = st.sidebar.multiselect("Filtrar por símbolo", options=df["Símbolo"].unique(), default=list(df["Símbolo"].unique()))
-    tipos = st.sidebar.multiselect("Tipo de opción", options=df["Tipo"].unique(), default=list(df["Tipo"].unique()))
-    fechas = st.sidebar.date_input("Rango de fechas", value=(df["Fecha"].min(), df["Fecha"].max()))
-    
-    df_filtrado = df[
-        df["Símbolo"].isin(simbolos) &
-        df["Tipo"].isin(tipos) &
-        (df["Fecha"] >= pd.to_datetime(fechas[0])) &
-        (df["Fecha"] <= pd.to_datetime(fechas[1]))
-    ]
-    st.markdown("### 📋 Transacciones filtradas")
-    st.dataframe(df_filtrado)
-
-    # --- Métricas principales ---
-    total_invertido = (df_filtrado["Prima"] * df_filtrado["Contratos"] * 100).sum()
-    total_recuperado = (df_filtrado["Valor final"] * df_filtrado["Contratos"] * 100).sum()
-    ganancia_total = df_filtrado["Ganancia/Pérdida"].sum()
-    pct_ganancia = (ganancia_total / total_invertido * 100) if total_invertido > 0 else 0
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("💸 Total Invertido", f"${total_invertido:,.2f}")
-    col2.metric("💰 Recuperado", f"${total_recuperado:,.2f}")
-    col3.metric("📈 Ganancia", f"${ganancia_total:,.2f} ({pct_ganancia:.2f}%)")
-
-    # --- Evolución temporal acumulada ---
-    st.markdown("### 📉 Evolución acumulada de Ganancia/Pérdida")
-
-    df_linea = df_filtrado.sort_values("Fecha")
-    df_linea["Resultado Acumulado"] = df_linea["Ganancia/Pérdida"].cumsum()
-
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(df_linea["Fecha"], df_linea["Resultado Acumulado"], marker='o')
-    ax.set_title("Ganancia/Pérdida acumulada a lo largo del tiempo")
-    ax.set_xlabel("Fecha")
-    ax.set_ylabel("Resultado Acumulado ($)")
-    ax.grid()
-    st.pyplot(fig)
-
-    # --- Gráfico por símbolo ---
-    st.markdown("### 📊 Ganancia total por símbolo")
-
-    resumen = df_filtrado.groupby("Símbolo")["Ganancia/Pérdida"].sum().reset_index()
-    fig2, ax2 = plt.subplots(figsize=(8, 4))
-    ax2.bar(resumen["Símbolo"], resumen["Ganancia/Pérdida"], color="skyblue")
-    ax2.axhline(0, color="gray", linestyle="--")
-    ax2.set_ylabel("Ganancia / Pérdida ($)")
-    ax2.set_title("Ganancia por símbolo (filtrados)")
-    st.pyplot(fig2)
-
-    # --- Porcentaje de operaciones ganadoras / perdedoras ---
-    st.markdown("### 🧮 Análisis de Resultados de Transacciones")
-    
-    ganadoras = df_filtrado[df_filtrado["Ganancia/Pérdida"] > 0].shape[0]
-    perdedoras = df_filtrado[df_filtrado["Ganancia/Pérdida"] < 0].shape[0]
-    neutras = df_filtrado[df_filtrado["Ganancia/Pérdida"] == 0].shape[0]
-    total_ops = len(df_filtrado)
-    
-    pct_ganadoras = (ganadoras / total_ops) * 100 if total_ops > 0 else 0
-    pct_perdedoras = (perdedoras / total_ops) * 100 if total_ops > 0 else 0
-    pct_neutras = (neutras / total_ops) * 100 if total_ops > 0 else 0
-    
-    col4, col5, col6 = st.columns(3)
-    col4.metric("✅ Ganadoras", f"{ganadoras} ({pct_ganadoras:.1f}%)")
-    col5.metric("❌ Perdedoras", f"{perdedoras} ({pct_perdedoras:.1f}%)")
-    col6.metric("➖ Neutras", f"{neutras} ({pct_neutras:.1f}%)")
-    
-    # --- Pie chart ---
-    fig_pie, ax_pie = plt.subplots()
-    ax_pie.pie(
-        [ganadoras, perdedoras, neutras],
-        labels=["Ganadoras", "Perdedoras", "Neutras"],
-        autopct="%1.1f%%",
-        colors=["green", "red", "gray"],
-        startangle=90
-    )
-    ax_pie.axis("equal")
-    ax_pie.set_title("Distribución de Resultados")
-    st.pyplot(fig_pie)
-
-
-    # Descargar resultados
-    st.download_button(
-        label="⬇️ Descargar resultados en Excel",
-        data=df.to_csv(index=False),
-        file_name="resultados_backtesting.csv",
-        mime="text/csv"
-    )
-
-
- # --- Top 3 operaciones con más ganancia ---
-    st.markdown("### 🏆 Mejores y Peores Operaciones")
-    
-    top_ganadoras = df_filtrado.sort_values("Ganancia/Pérdida", ascending=False).head(5)
-    top_perdedoras = df_filtrado.sort_values("Ganancia/Pérdida", ascending=True).head(5)
-    
-    col7, col8 = st.columns(2)
-    
-    with col7:
-        st.markdown("#### 🟢 Top 5 Ganadoras")
-        st.dataframe(top_ganadoras[["Símbolo", "Fecha", "Tipo", "Strike", "Prima", "Valor final", "Ganancia/Pérdida"]])
-    
-    with col8:
-        st.markdown("#### 🔴 Top 5 Perdedoras")
-        st.dataframe(top_perdedoras[["Símbolo", "Fecha", "Tipo", "Strike", "Prima", "Valor final", "Ganancia/Pérdida"]])
- # --- Top 3 operaciones con más ganancia ---
-
-
-
-# Mostrar historial y permitir edición
-if st.session_state.transacciones_opciones:
-    st.markdown("### 📋 Historial de transacciones registradas")
-    df_transacciones = pd.DataFrame(st.session_state.transacciones_opciones)
-
-    # Asegurar columnas necesarias
-    columnas_necesarias = ["Valor final", "Total recuperado", "Ganancia/Pérdida"]
-    for col in columnas_necesarias:
-        if col not in df_transacciones.columns:
-            df_transacciones[col] = 0.0
-
-    for i, row in df_transacciones.iterrows():
-        with st.expander(f"🗂 {row['Símbolo']} - {row['Tipo']} - Strike {row['Strike']}"):
-            cols = st.columns(3)
-            with cols[0]:
-                nuevo_valor_final = st.number_input(
-                    f"📉 Nuevo valor final ({row['Símbolo']})", 
-                    value=float(row['Valor final']), 
-                    key=f"valor_final_{i}"
-                )
-            with cols[1]:
-                actualizar = st.button(f"💾 Actualizar {row['Símbolo']} #{i}", key=f"actualizar_{i}")
-            if actualizar:
-                st.session_state.transacciones_opciones[i]["Valor final"] = nuevo_valor_final
-                st.session_state.transacciones_opciones[i]["Total recuperado"] = nuevo_valor_final * row['Contratos'] * 100
-                st.session_state.transacciones_opciones[i]["Ganancia/Pérdida"] = (nuevo_valor_final - row["Prima"]) * row['Contratos'] * 100
-                pd.DataFrame(st.session_state.transacciones_opciones).to_csv(full_path_op, index=False)
-                st.success("✅ Transacción actualizada.")
-
-    # Mostrar tabla general
-    st.markdown("### 📋 Resumen de Resultados")
-    st.dataframe(pd.DataFrame(st.session_state.transacciones_opciones))
 
 
 
@@ -640,11 +501,11 @@ if st.button("Predecir tendencia"):
             from prophet.diagnostics import cross_validation, performance_metrics
             
             # 1. Preparamos el DataFrame
-            # Asegúrate de haber calculado antes: SMA_20, SMA_50, Volume, RSI_14, MACD, Signal_Line
+            # Asegúrate de haber calculado antes: SMA_20, SMA_40, Volume, RSI_14, MACD, Signal_Line
             df_prophet = df.copy().reset_index().rename(columns={"Date": "ds", "Close": "y"})
             
             # Remover valores nulos para evitar errores
-            regresores = ['Volume', 'SMA_20', 'SMA_50', 'RSI_14', 'MACD', 'Signal_Line']
+            regresores = ['Volume', 'SMA_20', 'SMA_40', 'RSI_14', 'MACD', 'Signal_Line']
             df_prophet = df_prophet.dropna(subset=['y'] + regresores)
             
             # 2. Crear el modelo Prophet con regresores
@@ -719,7 +580,7 @@ if st.button("Predecir tendencia"):
         # Recalculamos indicadores
         df_ind = df.copy()
         df_ind["SMA_20"] = df_ind["Close"].rolling(20).mean()
-        df_ind["SMA_50"] = df_ind["Close"].rolling(50).mean()
+        df_ind["SMA_40"] = df_ind["Close"].rolling(40).mean()
             
         ema_12 = df_ind["Close"].ewm(span=12, adjust=False).mean()
         ema_26 = df_ind["Close"].ewm(span=26, adjust=False).mean()
@@ -730,7 +591,7 @@ if st.button("Predecir tendencia"):
         fig, ax = plt.subplots(figsize=(12, 5))
         ax.plot(df_ind["Date"], df_ind["Close"], label="Precio Real", color="black")
         ax.plot(df_ind["Date"], df_ind["SMA_20"], label="SMA 20", color="blue", linestyle="--")
-        ax.plot(df_ind["Date"], df_ind["SMA_50"], label="SMA 50", color="green", linestyle="--")
+        ax.plot(df_ind["Date"], df_ind["SMA_40"], label="SMA 40", color="green", linestyle="--")
         ax.plot(pred_rango["ds"], pred_rango["yhat"], label="Predicción Prophet", color="orange")
             
         ax.set_title(f"{seleccion} - Comparación: Prophet vs Indicadores")
@@ -749,7 +610,7 @@ if st.button("Predecir tendencia"):
             
         # Interpretación básica
         interpretacion = []
-        if df_ind["SMA_20"].iloc[-1] > df_ind["SMA_50"].iloc[-1]:
+        if df_ind["SMA_20"].iloc[-1] > df_ind["SMA_40"].iloc[-1]:
             interpretacion.append("SMA: Tendencia alcista 📈")
         else:
             interpretacion.append("SMA: Tendencia bajista 📉")
@@ -968,8 +829,11 @@ if st.sidebar.button(f"📊 Obtener Earnings de {ticker_actual}"):
 
 
 
-from reddit_sentiment import obtener_menciones_en_reddit
-from reddit_sentiment import obtener_posts_reddit
+from reddit_sentiment import (
+    obtener_menciones_en_reddit,
+    obtener_posts_reddit,
+    obtener_data_sentimientos_reddit
+)
 
 
 simbolo_reddit = st.session_state.ticker_global
@@ -1016,92 +880,138 @@ with tabs[3]:  # 📢 Reddit 2
 with tabs[4]:  # 📊 Distribución de Sentimiento por Acción
     st.subheader("📊 Distribución de Sentimiento por Acción (Reddit)")
 
-    # Este diccionario se debe construir dinámicamente en tu lógica de scraping Reddit
-    #sentimientos_por_simbolo = {
-    #    "AAPL": {"Positivo": 12, "Neutral": 5, "Negativo": 3},
-    #    "TSLA": {"Positivo": 18, "Neutral": 7, "Negativo": 4},
-    #    "META": {"Positivo": 7, "Neutral": 3, "Negativo": 6}
-    #}
+    simbolo_reddit = st.session_state.ticker_global
+    sentimientos = obtener_data_sentimientos_reddit(simbolo_reddit)
 
-
-
-
-    # Crear lista para almacenar datos
-    sentimientos = []
-    
-    # Procesar publicaciones de Reddit
-    for post in reddit.subreddit("wallstreetbets").search(simbolo, limit=100):
-        fecha = datetime.fromtimestamp(post.created_utc).date()
-        texto = post.title + " " + post.selftext
-        analisis = TextBlob(texto)
-        sentimiento = "Positivo" if analisis.sentiment.polarity > 0.1 else "Negativo" if analisis.sentiment.polarity < -0.1 else "Neutral"
-    
-        sentimientos.append({
-            "Fecha": fecha,
-            "Símbolo": simbolo.upper(),
-            "Sentimiento": sentimiento,
-            "Cantidad": 1
-        })
-    
-    # Crear DataFrame
     df_sentimiento = pd.DataFrame(sentimientos)
-    
-    # Agrupar por fecha, símbolo y sentimiento
-    df_sentimiento = df_sentimiento.groupby(["Fecha", "Símbolo", "Sentimiento"], as_index=False).sum()
 
-    
-    
-    # Convertir a DataFrame
-    df_sentimientos = pd.DataFrame(sentimientos).T
-    
-    # Crear gráfico de barras apiladas
-    fig_sent, ax_sent = plt.subplots(figsize=(8, 5))
-    df_sentimientos.plot(kind="bar", stacked=True, ax=ax_sent)
-    ax.set_title("Sentimiento en Reddit por Acción")
-    ax.set_xlabel("Símbolo")
-    ax.set_ylabel("Cantidad de publicaciones")
-    ax.legend(title="Sentimiento")
-    ax.grid(True)
-    
-    st.pyplot(fig_sent)
-
-    # Asegúrate de que `df_sentimiento` ya esté creado e incluya las columnas: Fecha, Símbolo, Sentimiento, Cantidad
-
-    st.subheader("📅 Filtro por Fecha y Análisis de Sentimiento")
-    
-    # Conversión de fechas si es necesario
-    df_sentimiento["Fecha"] = pd.to_datetime(df_sentimiento["Fecha"])
-    
-    # Rango de fechas
-    fecha_min = df_sentimiento["Fecha"].min().date()
-    fecha_max = df_sentimiento["Fecha"].max().date()
-    
-    fecha_inicio = st.date_input("Desde", fecha_min)
-    fecha_fin = st.date_input("Hasta", fecha_max)
-    simbolo_filtrado = st.selectbox("Símbolo", sorted(df_sentimiento["Símbolo"].unique()))
-    
-    # Aplicar filtros
-    filtro = (
-        (df_sentimiento["Fecha"] >= pd.to_datetime(fecha_inicio)) &
-        (df_sentimiento["Fecha"] <= pd.to_datetime(fecha_fin)) &
-        (df_sentimiento["Símbolo"] == simbolo_filtrado)
-    )
-    df_filtrado = df_sentimiento[filtro]
-    
-    # Gráfico
-    if not df_filtrado.empty:
-        st.markdown(f"### 🔍 Sentimiento para **{simbolo_filtrado}** del {fecha_inicio} al {fecha_fin}")
-        pivot = df_filtrado.pivot_table(index="Fecha", columns="Sentimiento", values="Cantidad", aggfunc="sum").fillna(0)
-    
-        fig, ax = plt.subplots(figsize=(8, 4))
-        pivot.plot(kind="bar", stacked=True, ax=ax)
-        ax.set_title(f"Tendencia de Sentimiento - {simbolo_filtrado}")
-        ax.set_ylabel("Cantidad de menciones")
-        ax.set_xlabel("Fecha")
-        ax.legend(title="Sentimiento")
-        st.pyplot(fig)
+    if df_sentimiento.empty:
+        st.warning("No se encontraron publicaciones recientes sobre este símbolo.")
     else:
-        st.warning("No hay datos disponibles para los filtros seleccionados.")
+       
+        # --------------------- Filtro por fecha ---------------------
+        st.subheader("📅 Filtro por Fecha y Análisis de Sentimiento")
+
+        df_sentimiento["Fecha"] = pd.to_datetime(df_sentimiento["Fecha"])
+        fecha_min = df_sentimiento["Fecha"].min().date()
+        fecha_max = df_sentimiento["Fecha"].max().date()
+
+        fecha_inicio = st.date_input("Desde", fecha_min)
+        fecha_fin = st.date_input("Hasta", fecha_max)
+        simbolo_filtrado = st.selectbox("Símbolo", sorted(df_sentimiento["Símbolo"].unique()))
+
+        filtro = (
+            (df_sentimiento["Fecha"] >= pd.to_datetime(fecha_inicio)) &
+            (df_sentimiento["Fecha"] <= pd.to_datetime(fecha_fin)) &
+            (df_sentimiento["Símbolo"] == simbolo_filtrado)
+        )
+        df_filtrado = df_sentimiento[filtro]
+
+#        if not df_filtrado.empty:
+#            st.markdown(f"### 🔍 Sentimiento para **{simbolo_filtrado}** del {fecha_inicio} al {fecha_fin}")
+#            pivot = df_filtrado.pivot_table(index="Fecha", columns="Sentimiento", values="Cantidad", aggfunc="sum").fillna(0)
+
+#            fig, ax = plt.subplots(figsize=(8, 4))
+#            pivot.plot(kind="bar", stacked=True, ax=ax)
+#            ax.set_title(f"Tendencia de Sentimiento - {simbolo_filtrado}")
+#            ax.set_ylabel("Cantidad de menciones")
+#            ax.set_xlabel("Fecha")
+#            ax.legend(title="Sentimiento")
+#            st.pyplot(fig)
+#        else:
+#            st.warning("No hay datos disponibles para los filtros seleccionados.")
+
+
+            # 🔁 Gráfico de Tendencia de Sentimiento
+#     st.subheader("📈 Tendencia de Sentimiento en el Tiempo")
+    
+#     if not df_filtrado.empty:
+#         pivot_lineas = df_filtrado.pivot_table(index="Fecha", columns="Sentimiento", values="Cantidad", aggfunc="sum").fillna(0)
+    
+#         fig_linea, ax_linea = plt.subplots(figsize=(8, 4))
+#         pivot_lineas.plot(kind="line", marker='o', ax=ax_linea)
+#         ax_linea.set_title(f"Tendencia de Sentimiento Diario - {simbolo_filtrado}")
+#         ax_linea.set_ylabel("Cantidad de menciones")
+#         ax_linea.set_xlabel("Fecha")
+# #         ax_linea.grid(True)
+#         ax_linea.legend(title="Sentimiento")
+#         st.pyplot(fig_linea)
+#     else:
+#         st.warning("No hay datos suficientes para mostrar la tendencia.")
+
+
+
+     # Agrupar cantidad por Fecha, Símbolo y Sentimiento
+        df_sentimiento = df_sentimiento.groupby(["Fecha", "Símbolo", "Sentimiento"], as_index=False)["Cantidad"].sum()
+
+        # Gráfico de barras agrupado por símbolo
+        resumen = df_sentimiento.groupby(["Símbolo", "Sentimiento"])["Cantidad"].sum().unstack().fillna(0)
+        fig_sent, ax_sent = plt.subplots(figsize=(8, 5))
+        resumen.plot(kind="bar", stacked=True, ax=ax_sent)
+        ax_sent.set_title("📊 Distribución de Sentimiento por Acción")
+        ax_sent.set_xlabel("Símbolo")
+        ax_sent.set_ylabel("Cantidad de publicaciones")
+        ax_sent.legend(title="Sentimiento")
+        st.pyplot(fig_sent)
+
+
+    # 🔁 Gráfico de Tendencia de Sentimiento Estilizado
+    st.subheader(f"📈 Tendencia de Sentimiento para {simbolo_filtrado}")
+    
+    if not df_filtrado.empty:
+        pivot_lineas = df_filtrado.pivot_table(
+            index="Fecha",
+            columns="Sentimiento",
+            values="Cantidad",
+            aggfunc="sum"
+        ).fillna(0)
+    
+        fig_linea, ax_linea = plt.subplots(figsize=(10, 4))
+    
+        if "Positivo" in pivot_lineas.columns:
+            ax_linea.plot(
+                pivot_lineas.index,
+                pivot_lineas["Positivo"],
+                label="Positivo",
+                color="orange",
+                linestyle="-",
+                marker="o",
+                linewidth=2
+            )
+    
+        if "Negativo" in pivot_lineas.columns:
+            ax_linea.plot(
+                pivot_lineas.index,
+                pivot_lineas["Negativo"],
+                label="Negativo",
+                color="orangered",
+                linestyle="--",
+                linewidth=2
+            )
+    
+        if "Neutral" in pivot_lineas.columns:
+            ax_linea.plot(
+                pivot_lineas.index,
+                pivot_lineas["Neutral"],
+                label="Neutral",
+                color="gray",
+                linestyle=":",
+                linewidth=2
+            )
+    
+        ax_linea.set_title(f"Tendencia de Sentimiento para {simbolo_filtrado}")
+        ax_linea.set_xlabel("Fecha")
+        ax_linea.set_ylabel("Cantidad de Publicaciones")
+        ax_linea.grid(True, linestyle="--", alpha=0.5)
+        ax_linea.legend()
+        fig_linea.tight_layout()
+    
+        st.pyplot(fig_linea)
+    else:
+        st.warning("No hay datos suficientes para mostrar la tendencia.")
+
+
+
 
 
 # ===============================
