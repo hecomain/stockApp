@@ -16,6 +16,8 @@ def validar_ticker(ticker):
 def calcular_indicadores(df):
     df['SMA_20'] = df['Close'].rolling(window=20).mean()
     df['SMA_50'] = df['Close'].rolling(window=50).mean()
+    df['SMA_100'] = df['Close'].rolling(window=100).mean()
+    df['SMA_200'] = df['Close'].rolling(window=200).mean()
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
