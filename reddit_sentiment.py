@@ -11,7 +11,8 @@ from reddit_config import (
     REDDIT_USER_AGENT
 )
 
-def obtener_menciones_en_reddit(simbolo, limite=50):
+
+def connect_reddit():
 
     try: 
         reddit = praw.Reddit(
@@ -21,12 +22,20 @@ def obtener_menciones_en_reddit(simbolo, limite=50):
             password=REDDIT_PASSWORD,
             user_agent=REDDIT_USER_AGENT
         )
-    
-    
+        
         # Verifica autenticación
         #print("Autenticando...")
         #user = reddit.user.me()
         #print(f"✅ Autenticación exitosa: {user}")
+       
+        return reddit
+    except Exception as e:
+        print(f"❌ Error de autenticación: {e}")
+
+def obtener_menciones_en_reddit(simbolo, limite=50):
+
+    try: 
+        reddit = connect_reddit()
     
         subreddits = ["stocks", "wallstreetbets", "options", "investing"]
         menciones = []
@@ -49,11 +58,8 @@ def obtener_menciones_en_reddit(simbolo, limite=50):
 
 
 def obtener_posts_reddit(simbolos, limite=30):
-    reddit = praw.Reddit(
-        client_id=REDDIT_CLIENT_ID,
-        client_secret=REDDIT_CLIENT_SECRET,
-        user_agent="StockSentimentApp"
-    )
+    
+    reddit = connect_reddit()
 
     subreddits = ["stocks", "wallstreetbets", "options", "investing"]
     posts_relevantes = []
@@ -77,3 +83,36 @@ def obtener_posts_reddit(simbolos, limite=30):
                     break  # Evitar duplicados si un post menciona más de un símbolo
 
     return posts_relevantes
+
+
+
+def obtener_data_sentimientos_reddit(simbolos, limite=30):
+    reddit = connect_reddit()
+
+    # Este diccionario se debe construir dinámicamente en tu lógica de scraping Reddit
+    #sentimientos_por_simbolo = {
+    #    "AAPL": {"Positivo": 12, "Neutral": 5, "Negativo": 3},
+    #    "TSLA": {"Positivo": 18, "Neutral": 7, "Negativo": 4},
+    #    "META": {"Positivo": 7, "Neutral": 3, "Negativo": 6}
+    #}
+
+
+     # Crear lista para almacenar datos
+    sentimientos = []
+    
+    # Procesar publicaciones de Reddit
+    for post in reddit.subreddit("wallstreetbets").search(simbolos, limit=100):
+        fecha = datetime.fromtimestamp(post.created_utc).date()
+        texto = post.title + " " + post.selftext
+        analisis = TextBlob(texto)
+        sentimiento = "Positivo" if analisis.sentiment.polarity > 0.1 else "Negativo" if analisis.sentiment.polarity < -0.1 else "Neutral"
+    
+        sentimientos.append({
+            "Fecha": fecha,
+            "Símbolo": simbolos.upper(),
+            "Sentimiento": sentimiento,
+            "Cantidad": 1
+        })
+
+    return sentimientos
+

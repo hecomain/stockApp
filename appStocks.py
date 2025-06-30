@@ -39,7 +39,7 @@ if "form_guardado" not in st.session_state:
     st.session_state["simbolos"] = "AAPL, TSLA"
     st.session_state["fecha"] = datetime(2022, 1, 1)
     st.session_state["intervalo"] = "1d"
-    st.session_state["carpeta"] = "./datos"
+    st.session_state["carpeta"] = "./datos/source"
     st.session_state["descargado"] = False
     st.session_state["zona_horaria"] = "America/New_York"
     st.session_state["dropbox_token"] = ""

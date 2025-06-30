@@ -122,10 +122,17 @@ else:
             with cols[1]:
                 actualizar = st.button(f"💾 Actualizar {row['Símbolo']} #{i}", key=f"actualizar_{i}")
             if actualizar:
-                df_transacciones[i]["Valor final"] = nuevo_valor_final
-                df_transacciones[i]["Total recuperado"] = nuevo_valor_final * row['Contratos'] * 100
-                df_transacciones[i]["Ganancia/Pérdida"] = (nuevo_valor_final - row["Prima"]) * row['Contratos'] * 100
-                pd.DataFrame(df_transacciones).to_csv(full_path_op, index=False)
+                #df_transacciones[i]["Valor final"] = nuevo_valor_final
+                #df_transacciones[i]["Total recuperado"] = nuevo_valor_final * row['Contratos'] * 100
+                #df_transacciones[i]["Ganancia/Pérdida"] = (nuevo_valor_final - row["Prima"]) * row['Contratos'] * 100
+                #pd.DataFrame(df_transacciones).to_csv(full_path_op, index=False)
+
+                df_transacciones.at[i, "Valor final"] = nuevo_valor_final
+                df_transacciones.at[i, "Total recuperado"] = nuevo_valor_final * row['Contratos'] * 100
+                df_transacciones.at[i, "Ganancia/Pérdida"] = (nuevo_valor_final - row["Prima"]) * row['Contratos'] * 100
+                df_transacciones.to_csv(full_path_op, index=False)
+
+                
                 st.success("✅ Transacción actualizada.")
     
     # Mostrar tabla general
