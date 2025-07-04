@@ -28,9 +28,13 @@ from utils import (
     interpretar_senales,
     subir_a_dropbox,
     get_simbolos_disponibles,
+    obtener_datos_yfinance_history,
+    convertir_a_zona_horaria_local
 )
 
-# Interfaz de usuario
+
+# === Configuración inicial ===
+st.set_page_config(page_title="📈 Descargador y Analizador de Acciones")
 st.title("📈 Descargador y Analizador de Acciones")
 
 # Inicializar session_state
@@ -79,9 +83,16 @@ if submitted:
         if not os.path.exists(carpeta):
             os.makedirs(carpeta)
         for simbolo in simbolos_list:
-            st.write(f"🔄 Procesando {simbolo}...")
+            st.write(f"🔄 Procesando {simbolo} desde= {fecha} int={intervalo}...")
             try:
-                data = yf.download(simbolo, start=fecha, interval=intervalo)
+                tz_ny = pytz.timezone("America/New_York")
+                ahora_ny = datetime.now(tz_ny)
+                #st.write(ahora_ny)
+
+                # == DESCARGA DE DATOS 
+
+                data = obtener_datos_yfinance_history(simbolo,fecha, intervalo)
+                
                 if data.empty:
                     st.warning(f"⚠️ No se encontraron datos para {simbolo}")
                     continue
@@ -95,39 +106,48 @@ if submitted:
                     continue
                             
                 data.columns = [col.split("_")[0] if "_" in col else col for col in data.columns]
+
+                # CALCULO DE INDICADORES 
                         
                 data = calcular_indicadores(data)
+
+                # CALCULO DE INDICADORES 
+                
                 data = generar_senales(data)
                 data = generar_senales_avanzadas(data, volumen_minimo=1000000)
-               
-            
-            
-                # 1. Convertir la zona horaria del índice a tu hora local
-                if data.index.tz is None:
-                    data.index = data.index.tz_localize('UTC')  
-                #data.index = data.index.tz_convert('America/New_York')
-                data.index = data.index.tz_convert(st.session_state.zona_horaria)
-                # 🔧 Convertir índice con zona horaria a sin zona horaria
-                data.index = data.index.tz_localize(None)                            
-                data.index.name = "Date"
-               
+
+                # AJUSTE DE ZONA HORARIA
+                #data = convertir_azona_horaria_local(data, zona_horaria="America/New_York")
+                data = convertir_a_zona_horaria_local(data, 
+                    intervalo=st.session_state.intervalo, 
+                    zona_origen="America/New_York", 
+                    zona_destino="America/New_York", 
+                    quitar_tz=True)
+                
+                                      
                 data = data[pd.to_numeric(data["Close"], errors="coerce").notnull()]
+
+                # PREPARAR DATOS PARA GUARDAR 
                 
                 data = preparar_dataframe_para_guardar(data)      
     
                 # Guardar Excel
-                        
-                #filename = f"{simbolo}_{fecha}_{intervalo}.csv".replace(":", "-")  -- CSV Option
+                                        
                 filename = f"{simbolo}_{fecha}_{intervalo}.xlsx".replace(":", "-")                  
-                full_path = os.path.join(carpeta, filename)
-                #data.to_csv(full_path, index_label='Date')  -- CSV Option                  
-                data.to_excel(full_path, sheet_name="Datos Técnicos")                   
-                st.success(f"✅ Datos de {simbolo} guardados en: {filename}")
+                full_path = os.path.join(carpeta, filename)            
+                data.to_excel(full_path, sheet_name="Datos Técnicos")       
+
+                # Guardar CVS
+                filename_cvs = f"{simbolo}_{fecha}_{intervalo}.csv".replace(":", "-") 
+                full_path_cvs = os.path.join(carpeta, filename_cvs)
+                data.to_csv(full_path_cvs, index_label='Date')   
+                
+                st.success(f"✅ Datos de {simbolo} guardados en: {filename_cvs}")
                         
             except Exception as e:
                 st.error(f"❌ Error al procesar {simbolo}: {e}")
     
-            # Crear ZIP
+    # Crear ZIP
                         
     zip_path = os.path.join(carpeta, "datos_acciones_excel.zip")
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
@@ -211,7 +231,7 @@ if archivo_sel:
             high=df["High"],
             low=df["Low"],
             close=df["Close"],
-             name="Velas"
+             name="Precio"
         ), row=1, col=1)
             
         fig.add_trace(go.Scatter(x=df.index, y=df["SMA_20"], mode='lines', name="SMA 20"), row=1, col=1)
@@ -223,6 +243,28 @@ if archivo_sel:
         fig.add_trace(go.Scatter(x=df.index, y=df["RSI_14"], mode='lines', name="RSI", line=dict(color='brown')), row=3, col=1)
         fig.add_hline(y=70, line=dict(color='red', dash='dash'), row=3, col=1)
         fig.add_hline(y=30, line=dict(color='green', dash='dash'), row=3, col=1)
+
+
+         # === Señales SMA ===
+        if 'Signal' in df.columns:
+            df_signals = df.dropna(subset=["Signal"])
+        
+            for i, row in df_signals.iterrows():
+                texto = row["Signal"]
+                if any(x in texto for x in ["SMA20", "SMA40", "SMA100", "SMA200"]):
+                    color = "green" if "Compra" in texto else "red"
+                    simbolo = "triangle-up" if "Compra" in texto else "triangle-down"
+                    precio = row["Close"] if pd.notnull(row["Close"]) else 0
+        
+                    fig.add_trace(go.Scatter(
+                        x=[i],
+                        y=[precio],
+                        mode="markers",
+                        marker=dict(symbol=simbolo, color=color, size=12),
+                        name=texto,
+                        showlegend=False,
+                        hovertemplate=f"{texto}<br>Precio: {precio:.2f}"
+                    ), row=1, col=1)
                             
         fig.update_layout(
             height=900,
@@ -231,6 +273,8 @@ if archivo_sel:
             xaxis_rangeslider_visible=False,
             showlegend=True
         )
+
+        
                             
         st.plotly_chart(fig, use_container_width=True)
                 

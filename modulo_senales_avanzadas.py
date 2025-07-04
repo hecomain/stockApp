@@ -166,7 +166,7 @@ def generar_senales_frecuencia_alta(df):
     return df
 
 
-def calcular_indicadores(df):
+def calcular_indicadoresOLD(df):
     """
     Calcula indicadores técnicos estándar para análisis:
     - Medias móviles (SMA)

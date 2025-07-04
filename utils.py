@@ -246,7 +246,7 @@ def get_simbolos_disponibles(carpeta):
         return []
 
 
-def calcular_indicadores(df):
+def calcular_indicadores(df, largo_plazo=True):
     """
     Calcula indicadores técnicos estándar para análisis:
     - Medias móviles (SMA)
@@ -255,13 +255,19 @@ def calcular_indicadores(df):
     """
     df = df.sort_index()
 
-    # === Medias móviles simples ===
+    # === Medias móviles simples ALTA FRECUENCIA ===
     df["SMA_5"] = df["Close"].rolling(window=5).mean()
     df["SMA_10"] = df["Close"].rolling(window=10).mean()
+
+    # === Medias móviles simples ===
+    
     df["SMA_20"] = df["Close"].rolling(window=20).mean()
     df["SMA_40"] = df["Close"].rolling(window=40).mean()
-    df["SMA_100"] = df["Close"].rolling(window=100).mean()
-    df["SMA_200"] = df["Close"].rolling(window=200).mean()
+
+    # === Medias móviles simples LARGO PLAZO ===
+    if largo_plazo:  
+        df["SMA_100"] = df["Close"].rolling(window=100).mean() 
+        df["SMA_200"] = df["Close"].rolling(window=200).mean()
 
     # === RSI (14) ===
     delta = df["Close"].diff()
@@ -302,107 +308,39 @@ def esta_en_horario_mercado():
     return start_time <= now_ny.time() <= end_time
 
 
-def graficar_con_tecnicaOLD(df, titulo="Gráfico Técnico", mostrar_rsi=True, mostrar_volumen=True, zona_horaria="America/New_York"):
-    import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
-
-    if df.empty:
-        return None
-
-    # Asegurar index con zona horaria
-    if df.index.tz is None:
-        df.index = df.index.tz_localize("UTC").tz_convert(zona_horaria)
-    else:
-        df.index = df.index.tz_convert(zona_horaria)
-
-    fig = make_subplots(
-        rows=3 if mostrar_rsi else 2,
-        cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.05,
-        row_heights=[0.5, 0.2, 0.3] if mostrar_rsi else [0.7, 0.3]
-    )
-
-    # === Velas ===
-    fig.add_trace(go.Candlestick(
-        x=df.index,
-        open=df['Open'], high=df['High'],
-        low=df['Low'], close=df['Close'],
-        name="Precio"
-    ), row=1, col=1)
-
-    # === Señales SMA ===
-    if 'Signal' in df.columns:
-        df_signals = df.dropna(subset=["Signal"])
-    
-        for i, row in df_signals.iterrows():
-            texto = row["Signal"]
-            if any(x in texto for x in ["SMA5", "SMA10", "SMA20", "SMA40"]):
-                color = "green" if "Compra" in texto else "red"
-                simbolo = "triangle-up" if "Compra" in texto else "triangle-down"
-                precio = row["Close"] if pd.notnull(row["Close"]) else 0
-    
-                fig.add_trace(go.Scatter(
-                    x=[i],
-                    y=[precio],
-                    mode="markers",
-                    marker=dict(symbol=simbolo, color=color, size=12),
-                    name=texto,
-                    showlegend=False,
-                    hovertemplate=f"{texto}<br>Precio: {precio:.2f}"
-                ), row=1, col=1)
-
-    # === Volumen ===
-    if mostrar_volumen and 'Volume' in df.columns:
-        fig.add_trace(go.Bar(
-            x=df.index, y=df['Volume'], name="Volumen",
-            marker_color='lightblue'
-        ), row=2, col=1)
-
-    # === RSI ===
-    if mostrar_rsi and 'RSI_14' in df.columns:
-        fig.add_trace(go.Scatter(
-            x=df.index, y=df['RSI_14'],
-            name="RSI 14", line=dict(color='purple')
-        ), row=3, col=1)
-        fig.add_hline(y=70, line=dict(color='red', dash="dot"), row=3, col=1)
-        fig.add_hline(y=30, line=dict(color='green', dash="dot"), row=3, col=1)
-
-    fig.update_layout(
-        height=800,
-        title=titulo,
-        xaxis_rangeslider_visible=False,
-        template="plotly_white"
-    )
-    return fig
-
 
 def graficar_con_tecnica(df, titulo="Gráfico Técnico", mostrar_rsi=True, mostrar_volumen=True, zona_horaria="America/New_York"):
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
 
+
+    st.write(df)
+
     if df.empty:
         return None
 
     # Asegurar index con zona horaria
-    if df.index.tz is None:
-        df.index = df.index.tz_localize("UTC").tz_convert(zona_horaria)
-    else:
-        df.index = df.index.tz_convert(zona_horaria)  
+    #if df.index.tz is None:
+    #    df.index = df.index.tz_localize("UTC").tz_convert(zona_horaria)
+    #else:
+    #    df.index = df.index.tz_convert(zona_horaria)  
 
     fig = make_subplots(
         rows=3 if mostrar_rsi else 2,
         cols=1,
         shared_xaxes=True,
         vertical_spacing=0.05,
-        row_heights=[0.5, 0.2, 0.3] if mostrar_rsi else [0.7, 0.3]
+        row_heights=[0.5, 0.25, 0.25] if mostrar_rsi else [0.7, 0.3],
+        specs=[[{"type": "candlestick"}], [{"type": "scatter"}], [{"type": "scatter"}]]
     )
 
     # === Velas ===
     fig.add_trace(go.Candlestick(
         x=df.index,
-        open=df['Open'], high=df['High'],
-        low=df['Low'], close=df['Close'],
+        open=df['Open'], 
+        high=df['High'],
+        low=df['Low'], 
+        close=df['Close'],
         name="Precio"
     ), row=1, col=1)
 
@@ -423,6 +361,8 @@ def graficar_con_tecnica(df, titulo="Gráfico Técnico", mostrar_rsi=True, mostr
                 line=dict(color=color, width=1.5)
             ), row=1, col=1)
 
+            
+
     # === Señales SMA ===
     if 'Signal' in df.columns:
         df_signals = df.dropna(subset=["Signal"])
@@ -454,16 +394,17 @@ def graficar_con_tecnica(df, titulo="Gráfico Técnico", mostrar_rsi=True, mostr
     # === RSI ===
     if mostrar_rsi and 'RSI_14' in df.columns:
         fig.add_trace(go.Scatter(
-            x=df.index, y=df['RSI_14'],
+            x=df.index, y=df['RSI_14'], mode='lines',
             name="RSI 14", line=dict(color='purple')
         ), row=3, col=1)
         fig.add_hline(y=70, line=dict(color='red', dash="dot"), row=3, col=1)
         fig.add_hline(y=30, line=dict(color='green', dash="dot"), row=3, col=1)
 
     fig.update_layout(
-        height=800,
+        height=900,
         title=titulo,
         xaxis_rangeslider_visible=False,
+        showlegend=True,
         template="plotly_white"
     )
 
@@ -492,21 +433,13 @@ def graficar_con_tecnica(df, titulo="Gráfico Técnico", mostrar_rsi=True, mostr
                 dict(bounds=["sat", "mon"]), 
                 # Oculta horas fuera de mercado
                 dict(bounds=[16, 9.5], pattern="hour"),
-                # Salta feriados
-                #dict(values=pd.to_datetime(holidays))
             ]
         )
-
-    #fig.update_xaxes(rangebreaks=[
-    #    dict(bounds=["sat", "mon"]),  # Salta fines de semana
-    #    dict(bounds=[16, 9.5], pattern="hour"),  # Salta horas fuera de mercado (16:00-9:30 NY)
-    #    dict(values=pd.to_datetime(holidays))  # Salta feriados
-    #])
 
     return fig
 
 
-def filtrar_datos_horario_mercado(df, exchange="NYSE", zona_horaria="America/New_York"):
+def filtrar_datos_horario_mercadoOLD(df, exchange="NYSE", zona_horaria="America/New_York"):
     """
     Filtra un DataFrame para dejar solo las filas dentro del horario de mercado válido (sin fines de semana, feriados, fuera de horario).
     
@@ -538,12 +471,41 @@ def filtrar_datos_horario_mercado(df, exchange="NYSE", zona_horaria="America/New
 
     return df_filtrado
 
+import pandas_market_calendars as mcal
+
+
+def filtrar_datos_horario_mercado(df, tz="America/New_York"):
+    if df.empty:
+        return df
+
+    nyse = mcal.get_calendar('NYSE')
+    schedule = nyse.schedule(
+        start_date=df.index.min().date(),
+        end_date=df.index.max().date()
+    )
+
+    # Mantener solo los timestamps en el horario del mercado
+    market_open = schedule["market_open"].dt.tz_convert(tz)
+    market_close = schedule["market_close"].dt.tz_convert(tz)
+
+    # Filtrar por horario
+    mask = []
+    for open_time, close_time in zip(market_open, market_close):
+        mask.append((df.index >= open_time) & (df.index <= close_time))
+    if mask:
+        mask_total = mask[0]
+        for m in mask[1:]:
+            mask_total |= m
+        return df[mask_total]
+    else:
+        return df.iloc[0:0]
+
+
 
 
 def obtener_datos_yfinance_live(ticker, intervalo="15m", lookback_horas=2):
     tz_ny = pytz.timezone("America/New_York")
     ahora_ny = datetime.now(tz_ny)
-    #ahora_ny = datetime.now()
     inicio = ahora_ny - timedelta(hours=lookback_horas)
     
     df = yf.download(
@@ -554,13 +516,101 @@ def obtener_datos_yfinance_live(ticker, intervalo="15m", lookback_horas=2):
         progress=False
     )
 
-    df.index = df.index.tz_convert("America/New_York")  # Convertir a hora NY
+    if df.index.tz is None:
+        df.index = df.index.tz_localize("UTC").tz_convert("America/New_York")
+    else:
+        df.index = df.index.tz_convert("America/New_York")
+
+    return df
+
+
+
+def obtener_datos_yfinance_historyOLD(ticker, start_dateDown, intervalo="1d"):
+    tz_ny = pytz.timezone("America/New_York")
+    ahora_ny = datetime.now(tz_ny)
+    mañana_ny = (ahora_ny + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    # Validación para intervalos intradía
+    intradia_intervalos = ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"]
+    if intervalo in intradia_intervalos:
+        max_dias = 60
+        dias_solicitados = (ahora_ny.date() - pd.to_datetime(start_dateDown).date()).days
+        if dias_solicitados > max_dias:
+            raise ValueError(f"⚠️ Para intervalos intradía solo se permiten hasta {max_dias} días. Estás solicitando {dias_solicitados} días.")
+
+    df = yf.download(
+        tickers=ticker,
+        start=start_dateDown,
+        end=mañana_ny,
+        interval=intervalo,
+        progress=False
+    )
+
+    if df.empty:
+        print("⚠️ No se obtuvieron datos. Verifica el ticker o el rango de fechas.")
+        return df
+
+    return df
+
+
+def obtener_datos_yfinance_history(ticker, start_dateDown, intervalo="1d"):
+    tz_ny = pytz.timezone("America/New_York")
+    ahora_ny = datetime.now(tz_ny)
+    
+    # Calculamos la fecha de mañana (por seguridad, para 'end')
+    mañana_ny = (ahora_ny + timedelta(days=1)).strftime("%Y-%m-%d")
+    
+    # Validación para intervalos intradía
+    intradia_intervalos = ["15m", "1h"]
+    if intervalo in intradia_intervalos:
+        max_dias = 60
+        dias_solicitados = (ahora_ny.date() - pd.to_datetime(start_dateDown).date()).days
+        if dias_solicitados > max_dias:
+            raise ValueError(f"⚠️ Para intervalos intradía solo se permiten hasta {max_dias} días. Estás solicitando {dias_solicitados} días.")
+    
+    # Descarga
+    #df = yf.download(
+    #    tickers=ticker,
+    #    start=start_dateDown,
+    #    end=mañana_ny,
+    #    interval=intervalo,
+    #    progress=False
+    #)
+
+    ticker_obj = yf.Ticker(ticker)
+    df = ticker_obj.history(
+        start=start_dateDown,
+        end=mañana_ny,
+        prepost=True,
+        interval=intervalo,
+        actions=False,
+        auto_adjust=True
+    )
+
+   
+
+    if df.empty:
+        print("⚠️ No se obtuvieron datos. Verifica el ticker o el rango de fechas.")
+        return df
+
+    # Convertimos a hora NY si no lo está
+    if df.index.tz is None:
+        df.index = df.index.tz_localize("UTC").tz_convert("America/New_York")
+    else:
+        df.index = df.index.tz_convert("America/New_York")
+    
+    # Verificación de último dato
+    ultimo_dt = df.index.max()
+    cierre_teorico = ahora_ny.replace(hour=16, minute=0, second=0, microsecond=0)
+    
+    if intradia_intervalos and ultimo_dt < cierre_teorico:
+        print(f"⚠️ Último dato intradía hasta {ultimo_dt.strftime('%Y-%m-%d %H:%M')} NY. Puede que los datos del cierre aún no estén disponibles.")
+    
     return df
 
 
 def obtener_datos_yfinance_today(ticker, intervalo="15m"):
     today_ny = datetime.today()
-
     tz_ny = pytz.timezone("America/New_York")
     ahora_ny = datetime.now(tz_ny)
     
@@ -579,7 +629,47 @@ def obtener_datos_yfinance_today(ticker, intervalo="15m"):
         progress=False
     )
     
-    df.index = df.index.tz_convert("America/New_York")  # Convertir a hora NY
+    if df.index.tz is None:
+        df.index = df.index.tz_localize("UTC").tz_convert("America/New_York")
+    else:
+        df.index = df.index.tz_convert("America/New_York")
+
+    return df
+
+
+def convertir_a_zona_horaria_local(df, intervalo="1d", zona_origen="UTC", zona_destino="America/New_York", quitar_tz=True):
+    """
+    Convierte el índice datetime de un DataFrame a una zona horaria local, manejando correctamente DST.
+    
+    :param df: DataFrame con índice datetime.
+    :param zona_origen: Zona horaria de origen, por defecto 'UTC'.
+    :param zona_destino: Zona horaria de destino, por defecto 'America/New_York'.
+    :param quitar_tz: Si True, devuelve el índice sin información de zona horaria.
+    :return: DataFrame con índice convertido.
+    """
+
+    if df.empty:
+        return df
+       
+    if df.index.tz is None:
+        # Asumir zona origen si no tiene tz
+        df.index = df.index.tz_localize(pytz.timezone(zona_origen))
+    else:
+        # Asegurar que sea la zona de origen especificada si hay tz
+        df.index = df.index.tz_convert(pytz.timezone(zona_origen))
+
+    # Convertir a zona de destino
+    df.index = df.index.tz_convert(pytz.timezone(zona_destino))
+
+    # Si el intervalo no es intradía, quitar hora (solo dejar fecha)
+    if intervalo not in ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"]:
+        df.index = df.index.normalize()
+
+    if quitar_tz:
+        # Quitar tz info si se desea un índice naive
+        df.index = df.index.tz_localize(None)
+
+    df.index.name = "Date"
     return df
 
 
