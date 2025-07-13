@@ -10,8 +10,13 @@ import pandas_market_calendars as mcal
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+import plotly.express as px
+
 import yfinance as yf
 import pandas_market_calendars as mcal
+
+from pathlib import Path
+
 
 
 
@@ -510,9 +515,10 @@ def obtener_datos_yfinance_live(ticker, intervalo="15m", lookback_horas=2):
     
     df = yf.download(
         tickers=ticker,
+        interval=intervalo,
         start=inicio,
         end=ahora_ny + timedelta(minutes=15),  # Forzar que incluya última vela
-        interval=intervalo,
+        prepost=True,
         progress=False
     )
 
@@ -523,34 +529,6 @@ def obtener_datos_yfinance_live(ticker, intervalo="15m", lookback_horas=2):
 
     return df
 
-
-
-def obtener_datos_yfinance_historyOLD(ticker, start_dateDown, intervalo="1d"):
-    tz_ny = pytz.timezone("America/New_York")
-    ahora_ny = datetime.now(tz_ny)
-    mañana_ny = (ahora_ny + timedelta(days=1)).strftime("%Y-%m-%d")
-
-    # Validación para intervalos intradía
-    intradia_intervalos = ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"]
-    if intervalo in intradia_intervalos:
-        max_dias = 60
-        dias_solicitados = (ahora_ny.date() - pd.to_datetime(start_dateDown).date()).days
-        if dias_solicitados > max_dias:
-            raise ValueError(f"⚠️ Para intervalos intradía solo se permiten hasta {max_dias} días. Estás solicitando {dias_solicitados} días.")
-
-    df = yf.download(
-        tickers=ticker,
-        start=start_dateDown,
-        end=mañana_ny,
-        interval=intervalo,
-        progress=False
-    )
-
-    if df.empty:
-        print("⚠️ No se obtuvieron datos. Verifica el ticker o el rango de fechas.")
-        return df
-
-    return df
 
 
 def obtener_datos_yfinance_history(ticker, start_dateDown, intervalo="1d"):
@@ -569,14 +547,6 @@ def obtener_datos_yfinance_history(ticker, start_dateDown, intervalo="1d"):
             raise ValueError(f"⚠️ Para intervalos intradía solo se permiten hasta {max_dias} días. Estás solicitando {dias_solicitados} días.")
     
     # Descarga
-    #df = yf.download(
-    #    tickers=ticker,
-    #    start=start_dateDown,
-    #    end=mañana_ny,
-    #    interval=intervalo,
-    #    progress=False
-    #)
-
     ticker_obj = yf.Ticker(ticker)
     df = ticker_obj.history(
         start=start_dateDown,
@@ -585,9 +555,7 @@ def obtener_datos_yfinance_history(ticker, start_dateDown, intervalo="1d"):
         interval=intervalo,
         actions=False,
         auto_adjust=True
-    )
-
-   
+    )   
 
     if df.empty:
         print("⚠️ No se obtuvieron datos. Verifica el ticker o el rango de fechas.")
@@ -617,7 +585,6 @@ def obtener_datos_yfinance_today(ticker, intervalo="15m"):
     startDate="2025-06-01"
    
     #df = yf.download(ticker, period="14d", interval=intervalo)
-
     #df = yf.download(ticker, start=startDate, interval=intervalo)
 
 
@@ -625,8 +592,10 @@ def obtener_datos_yfinance_today(ticker, intervalo="15m"):
         tickers=ticker,
         start=startDate,
         end=ahora_ny + timedelta(minutes=15),  # Forzar que incluya última vela
+        prepost=True,
         interval=intervalo,
-        progress=False
+        progress=False,
+        auto_adjust=True
     )
     
     if df.index.tz is None:
@@ -671,5 +640,163 @@ def convertir_a_zona_horaria_local(df, intervalo="1d", zona_origen="UTC", zona_d
 
     df.index.name = "Date"
     return df
+
+
+def obtener_datos_opciones(ticker_symbol, expiry):
+    # Obtener el objeto del ticker
+    ticker = yf.Ticker(ticker_symbol)
+
+    # Obtener el chain de opciones
+    opt = ticker.option_chain(expiry)
+
+    #st.write(opt)
+
+    # Procesar Calls
+    calls = opt.calls.copy()
+    calls["Type"] = "Call"
+    calls["Expiry"] = expiry
+    
+    # Procesar Puts
+    puts = opt.puts.copy()
+    puts["Type"] = "Put"
+    puts["Expiry"] = expiry
+
+    # Unir ambos
+    df_options = pd.concat([calls, puts], ignore_index=True)
+
+    # Convertir y limpiar columnas
+    df_options["lastTradeDate"] = pd.to_datetime(df_options["lastTradeDate"])
+    df_options["lastTradeDate"] = df_options["lastTradeDate"].dt.tz_convert("America/New_York")
+
+    df_options["contractSize"] = df_options["contractSize"].apply(map_contract_size)
+    df_options["openInterest"] = pd.to_numeric(df_options["openInterest"], errors="coerce")
+    df_options["lastPrice"] = pd.to_numeric(df_options["lastPrice"], errors="coerce")
+
+    # Calcular premium (en USD)
+    df_options["premium"] = df_options["lastPrice"] * df_options["contractSize"] * df_options["openInterest"]
+    df_options.loc[df_options["Type"] == "Put", "premium"] *= -1
+
+    # Separar fecha y hora
+    df_options["date"] = df_options["lastTradeDate"].dt.date
+    df_options["hour"] = df_options["lastTradeDate"].dt.strftime("%H:%M")
+
+    # Ordenar por fecha y hora
+    df_options = df_options.sort_values(by=["Type", "date", "hour"]).reset_index(drop=True)
+
+    #st.write(df_options)
+
+    return df_options
+
+
+def map_contract_size(val):
+    if val == 'REGULAR':
+        return 100
+    elif val == 'MINI':
+        return 10
+    else:
+        return 100  # Por defecto
+
+
+def detectar_operaciones_institucionales(df_options, umbral=500):
+    """
+    Filtra y visualiza opciones con openInterest superior al umbral (posibles institucionales)
+    """
+    #st.subheader("🚀 Posibles operaciones institucionales")
+    with st.expander("🚀 Posibles operaciones institucionales"):
+
+        doiCol1, doiCol2 = st.columns(2)
+                    
+        with doiCol1:
+
+            #df_options.loc[df_options["Type"] == "Put", "premium"] *= -1
+            df_options["premium_fmt"] = df_options["premium"].apply(lambda x: f"${x:,.1f}")
+
+            # Filtra las opciones con interés abierto superior al umbral
+            df_institucional = df_options[df_options["openInterest"] >= umbral]
+        
+            if df_institucional.empty:
+                st.info(f"No se detectaron operaciones con open interest ≥ {umbral}.")
+                return None
+ 
+            # Muestra un resumen
+            st.dataframe(df_institucional[[
+                "lastTradeDate", "strike", "Type", "openInterest", "premium_fmt"
+            ]].sort_values(by="openInterest", ascending=False))
+
+        with doiCol2:
+    
+            # Mapea los colores manualmente
+            color_discrete_map = {
+                "Call": "green",
+                "Put": "red"
+            }
+            
+            fig_bar = px.bar(
+                df_institucional.sort_values(by="openInterest", ascending=False).head(10),
+                x="strike",
+                y="openInterest",
+                color="Type",
+                title="Top 10 mayores Open Interest (posibles institucionales)",
+                labels={"openInterest": "Open Interest", "strike": "Strike"},
+                template="plotly_white",
+                color_discrete_map=color_discrete_map  # Aquí el mapeo manual
+            )
+            
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+    # Gráfico tipo heatmap por Strike y Expiry
+    #df_heatmap = df_institucional.groupby(["strike", "Expiry"])["openInterest"].sum().reset_index()
+
+    #fig = px.density_heatmap(
+    #    df_heatmap, 
+    #    x="strike", 
+    #    y="Expiry", 
+    #    z="openInterest",
+    #    color_continuous_scale="Viridis",
+    #    title="Mapa de calor: Open Interest por Strike y Expiry"
+    #)
+
+    #st.plotly_chart(fig, use_container_width=True)
+
+
+    return df_institucional
+
+
+import os
+from pathlib import Path
+
+def guardar_datos_opciones_y_precio(df_opciones, df_precios, simbolo, expiry, intervalo, carpeta_raiz="data_opciones"):
+    """
+    Guarda dos archivos CSV:
+    - Uno con las opciones (llamado SYMBOL_EXPIRY_INTERVALO_options.csv)
+    - Otro con los precios (llamado SYMBOL_EXPIRY_INTERVALO_prices.csv)
+
+    Estructura de carpeta:
+    /carpeta_raiz/SYMBOL/
+        SYMBOL_EXPIRY_INTERVALO_options.csv
+        SYMBOL_EXPIRY_INTERVALO_prices.csv
+    """
+
+    # Fecha actual en formato YYYY-MM-DD
+    fecha_actual = datetime.now().strftime("%Y-%m-%d")
+    
+    simbolo = simbolo.upper()
+    Path(carpeta_raiz).mkdir(parents=True, exist_ok=True)
+
+    carpeta_simbolo = os.path.join(carpeta_raiz, simbolo, expiry)
+    Path(carpeta_simbolo).mkdir(parents=True, exist_ok=True)
+
+    # Crear nombres de archivo
+    nombre_base = f"{simbolo}_{fecha_actual}_{intervalo}"
+    ruta_opciones = os.path.join(carpeta_simbolo, f"{nombre_base}_options.csv")
+    ruta_precios = os.path.join(carpeta_simbolo, f"{nombre_base}_prices.csv")
+
+    # Guardar archivos
+    df_opciones.to_csv(ruta_opciones, index=False)
+    df_precios.to_csv(ruta_precios)
+
+    return ruta_opciones, ruta_precios
+
+
 
 
