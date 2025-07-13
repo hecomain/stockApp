@@ -10,7 +10,7 @@ st.title("📊 Últimos Datos del Día de Trading")
 
 # Sidebar - Ingreso del símbolo
 symbol = st.sidebar.text_input("Ingrese el símbolo de la acción (ej: AAPL, MSFT, TSLA):", value="AAPL").upper()
-st.sidebar.page_link("pages/premiums.py", label="Premiums", icon="📊")
+#st.sidebar.page_link("pages/premiums.py", label="Premiums", icon="📊")
 
 def obtener_datos_ultimo_dia(symbol):
     ticker = yf.Ticker(symbol)
