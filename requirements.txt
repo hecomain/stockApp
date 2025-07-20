@@ -13,3 +13,4 @@ praw
 openpyxl
 requests
 numpy
+scipy
