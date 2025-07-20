@@ -14,3 +14,4 @@ openpyxl
 requests
 numpy
 scipy
+pandas_market_calendars
