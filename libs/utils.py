@@ -3,19 +3,15 @@ import pandas as pd
 import yfinance as yf
 import dropbox
 import streamlit as st
-from datetime import datetime, timedelta
 import pytz
 import pandas_market_calendars as mcal
 
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-
 import plotly.express as px
 
-import yfinance as yf
-import pandas_market_calendars as mcal
-
+from plotly.subplots import make_subplots
 from pathlib import Path
+from datetime import datetime, timedelta
 
 
 
