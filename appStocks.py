@@ -15,9 +15,9 @@ from fpdf import FPDF
 from datetime import date, timedelta, datetime, timezone
 from textblob import TextBlob
 
-from modulo_senales_avanzadas import generar_senales_avanzadas
-from modulo_backtesting import backtest_senales
-from utils import (
+from libs.modulo_senales_avanzadas import generar_senales_avanzadas
+from libs.modulo_backtesting import backtest_senales
+from libs.utils import (
     validar_ticker,
     calcular_indicadores,
     preparar_dataframe_para_guardar,
